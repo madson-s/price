@@ -105,11 +105,11 @@ export const Scanner = () => {
       // Calcular tamanho responsivo do box
       const calculateBoxSize = () => {
         if (scanMode === "barcode") {
-          // Para código de barras, usar formato retangular horizontal
-          const width = Math.min(window.innerWidth * 0.8, 350);
-          return { width, height: width * 0.4 }; // Proporção 2.5:1
+          // Para código de barras, usar formato retangular horizontal mais largo
+          const width = Math.min(window.innerWidth * 0.9, 400);
+          return { width, height: Math.floor(width * 0.35) }; // Proporção otimizada para barcode
         } else {
-          // Para QR code e modo "all", usar formato quadrado
+          // Para QR code, usar formato quadrado
           const width = Math.min(window.innerWidth * 0.7, 300);
           return { width, height: width };
         }
@@ -118,11 +118,13 @@ export const Scanner = () => {
       await html5QrCode.start(
         cameraId,
         {
-          fps: 10,
+          fps: scanMode === "barcode" ? 20 : 10, // FPS maior para barcode
           qrbox: calculateBoxSize(),
-          aspectRatio: scanMode === "barcode" ? 2.5 : 1.0,
+          aspectRatio: 1.0,
+          disableFlip: false, // Permitir flip horizontal
         },
         async (decodedText, decodedResult) => {
+          console.log("Código detectado:", decodedText, "Formato:", decodedResult);
           setScannedCode(decodedText);
           setCodeFormat(decodedResult.result.format?.formatName || "Desconhecido");
           await stopScanner();
@@ -305,6 +307,13 @@ export const Scanner = () => {
               >
                 <X className="h-5 w-5" />
               </Button>
+            </div>
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-xs whitespace-nowrap">
+              {scanMode === "barcode" ? (
+                <span>📊 Posicione horizontalmente o código de barras</span>
+              ) : (
+                <span>📱 Centralize o QR Code na área</span>
+              )}
             </div>
           </div>
         </Card>
