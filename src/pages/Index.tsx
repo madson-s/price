@@ -16,7 +16,7 @@ const Index = () => {
             Product Scanner
           </h1>
           <p className="text-muted-foreground">
-            Escaneie QR Codes, códigos de barras, imagens ou converse via chat
+            Escaneie QR Codes, códigos EAN, imagens ou converse via chat
           </p>
         </header>
 

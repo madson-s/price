@@ -43,17 +43,10 @@ export const Scanner = () => {
     if (mode === "qrcode") {
       return [Html5QrcodeSupportedFormats.QR_CODE];
     } else {
-      // Modo "barcode" - suporta todos os formatos de código de barras
+      // Modo "barcode" - apenas formatos EAN
       return [
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.CODE_39,
-        Html5QrcodeSupportedFormats.CODE_93,
         Html5QrcodeSupportedFormats.EAN_13,
         Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.ITF,
-        Html5QrcodeSupportedFormats.CODABAR,
       ];
     }
   };
@@ -252,7 +245,7 @@ export const Scanner = () => {
               </Tabs>
               <p className="text-xs text-muted-foreground">
                 {scanMode === "qrcode" && "Detecta apenas QR Codes"}
-                {scanMode === "barcode" && "Detecta Códigos de Barras (EAN, UPC, CODE 128, etc.)"}
+                {scanMode === "barcode" && "Detecta apenas códigos EAN-13 e EAN-8"}
               </p>
             </div>
           </Card>
@@ -310,7 +303,7 @@ export const Scanner = () => {
             </div>
             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-xs whitespace-nowrap">
               {scanMode === "barcode" ? (
-                <span>📊 Posicione horizontalmente o código de barras</span>
+                <span>📊 Posicione o código EAN horizontalmente</span>
               ) : (
                 <span>📱 Centralize o QR Code na área</span>
               )}
