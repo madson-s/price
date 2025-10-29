@@ -37,6 +37,36 @@
     padding: 2em;
   }
   
-  .read-the-docs {
-    color: #888;
-  }
+.read-the-docs {
+  color: #888;
+}
+
+/* Estilos para o scanner de códigos de barras */
+#scanner-container {
+  position: relative;
+  width: 100%;
+}
+
+/* Garantir que o vídeo seja visível */
+#scanner-container video {
+  width: 100% !important;
+  height: auto !important;
+  display: block !important;
+}
+
+/* Estilizar a área de detecção (qrbox) */
+#scanner-container canvas {
+  display: block !important;
+}
+
+/* Forçar visibilidade da região de escaneamento */
+#qr-shaded-region {
+  border: 3px solid rgba(0, 255, 0, 0.7) !important;
+  box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Área interna do scanner */
+div[style*="qr-code-full-region"] {
+  width: 100% !important;
+  height: 100% !important;
+}

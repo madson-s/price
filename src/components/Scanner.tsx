@@ -98,9 +98,13 @@ export const Scanner = () => {
       // Calcular tamanho responsivo do box
       const calculateBoxSize = () => {
         if (scanMode === "barcode") {
-          // Para código de barras, usar formato retangular horizontal mais largo
-          const width = Math.min(window.innerWidth * 0.9, 400);
-          return { width, height: Math.floor(width * 0.35) }; // Proporção otimizada para barcode
+          // Para código de barras EAN, usar faixa horizontal bem larga
+          const screenWidth = window.innerWidth;
+          const width = Math.min(screenWidth * 0.9, 450); // 90% da tela ou max 450px
+          const height = Math.max(Math.floor(width * 0.3), 100); // Mínimo 100px de altura
+          
+          console.log("Barcode box size:", { width, height, screenWidth });
+          return { width, height };
         } else {
           // Para QR code, usar formato quadrado
           const width = Math.min(window.innerWidth * 0.7, 300);
@@ -108,12 +112,19 @@ export const Scanner = () => {
         }
       };
 
+      const boxSize = calculateBoxSize();
+      console.log("Iniciando scanner com configurações:", {
+        scanMode,
+        boxSize,
+        fps: scanMode === "barcode" ? 20 : 10
+      });
+
       await html5QrCode.start(
         cameraId,
         {
           fps: scanMode === "barcode" ? 20 : 10, // FPS maior para barcode
-          qrbox: calculateBoxSize(),
-          aspectRatio: 1.0,
+          qrbox: boxSize,
+          aspectRatio: scanMode === "barcode" ? 16/9 : 1.0,
           disableFlip: false, // Permitir flip horizontal
         },
         async (decodedText, decodedResult) => {
@@ -127,6 +138,8 @@ export const Scanner = () => {
           // Silent error handling for scanning attempts
         }
       );
+      
+      console.log("Scanner iniciado com sucesso");
     } catch (err: any) {
       console.error("Erro ao iniciar scanner:", err);
       setIsRequestingPermission(false);
