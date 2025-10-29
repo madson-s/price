@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Html5Qrcode, CameraDevice, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera, Barcode, QrCode } from "lucide-react";
+import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera, Barcode, QrCode, Flashlight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -20,6 +20,7 @@ export const Scanner = () => {
   const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [scanMode, setScanMode] = useState<ScanMode>("qrcode");
+  const [torchEnabled, setTorchEnabled] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const { toast } = useToast();
 
@@ -69,11 +70,18 @@ export const Scanner = () => {
       // Aguardar o próximo tick para garantir que o DOM foi atualizado
       await new Promise(resolve => setTimeout(resolve, 100));
       
+      // Inicializar scanner com recursos experimentais
       const html5QrCode = new Html5Qrcode("scanner-container", {
         formatsToSupport: getSupportedFormats(scanMode),
         verbose: false,
+        // 🚀 Usar API nativa de detecção de barcode (Chrome 113+, Android 13+)
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
       });
       scannerRef.current = html5QrCode;
+      
+      console.log("✓ Scanner inicializado com BarcodeDetector nativo (se disponível)");
 
       // Se não foi especificado um índice, procurar pela câmera traseira
       let selectedCameraIndex = cameraIndex;
@@ -100,15 +108,15 @@ export const Scanner = () => {
         console.log("Dimensões reais do viewfinder:", { viewfinderWidth, viewfinderHeight });
         
         if (scanMode === "barcode") {
-          // Para código de barras EAN, usar faixa horizontal bem larga
-          // Usar 90% da largura do vídeo e altura proporcional
-          const width = Math.floor(viewfinderWidth * 0.9);
-          const height = Math.floor(viewfinderHeight * 0.2); // 20% da altura do vídeo
+          // Para código de barras EAN, área REDUZIDA para melhor foco em códigos pequenos
+          // Usar área menor ajuda o algoritmo a detectar códigos pequenos
+          const width = Math.min(Math.floor(viewfinderWidth * 0.8), 400);  // Máx 400px
+          const height = Math.min(Math.floor(viewfinderHeight * 0.25), 150); // Máx 150px
           
-          console.log("Barcode box calculado:", { width, height });
+          console.log("Barcode box calculado (otimizado para códigos pequenos):", { width, height });
           return { width, height };
         } else {
-          // Para QR code, usar formato quadrado (250x250 ou 70% do menor lado)
+          // Para QR code, usar formato quadrado padrão
           const size = Math.min(
             Math.floor(viewfinderWidth * 0.7),
             Math.floor(viewfinderHeight * 0.7),
@@ -122,14 +130,15 @@ export const Scanner = () => {
 
       console.log("Iniciando scanner com configurações:", {
         scanMode,
-        fps: scanMode === "barcode" ? 20 : 10,
+        fps: scanMode === "barcode" ? 15 : 10, // FPS otimizado para qualidade
         usingDynamicQrBox: true
       });
 
       await html5QrCode.start(
         cameraId,
         {
-          fps: scanMode === "barcode" ? 20 : 10, // FPS maior para barcode
+          // FPS 15 para barcode - prioriza qualidade de cada frame vs quantidade
+          fps: scanMode === "barcode" ? 15 : 10,
           qrbox: calculateQrBox, // Função dinâmica!
           aspectRatio: scanMode === "barcode" ? 16/9 : 1.0,
           disableFlip: false, // Permitir flip horizontal
@@ -161,7 +170,43 @@ export const Scanner = () => {
         }
       );
       
-      console.log("Scanner iniciado com sucesso");
+      console.log("✓ Scanner iniciado - aguardando foco automático...");
+      
+      // 🎯 Aguardar 1200ms para foco automático estabilizar
+      // Nos primeiros ~1000ms a imagem pode estar borrada
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      
+      // Verificar capacidades da câmera e aplicar torch se disponível e em modo barcode
+      try {
+        const videoElement = document.querySelector('#scanner-container video') as HTMLVideoElement;
+        if (videoElement && videoElement.srcObject) {
+          const stream = videoElement.srcObject as MediaStream;
+          const track = stream.getVideoTracks()[0];
+          
+          if (track) {
+            const capabilities = track.getCapabilities() as any;
+            console.log("📸 Capacidades da câmera:", capabilities);
+            
+            // Se focusMode não aparecer, o navegador não suporta controle de foco
+            if (!capabilities.focusMode) {
+              console.warn("⚠️ focusMode não suportado - foco será automático do sistema");
+            }
+            
+            // Habilitar torch (lanterna) automaticamente para barcode
+            if (scanMode === "barcode" && capabilities.torch) {
+              await track.applyConstraints({ 
+                advanced: [{ torch: true }] as any
+              });
+              setTorchEnabled(true);
+              console.log("🔦 Torch (lanterna) ativada automaticamente");
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("Não foi possível verificar capacidades da câmera:", error);
+      }
+      
+      console.log("✅ Scanner pronto para detectar códigos");
     } catch (err: any) {
       console.error("Erro ao iniciar scanner:", err);
       setIsRequestingPermission(false);
@@ -208,6 +253,40 @@ export const Scanner = () => {
     await stopScanner();
     const nextCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
     await startScanner(nextCameraIndex);
+  };
+
+  const toggleTorch = async () => {
+    try {
+      const videoElement = document.querySelector('#scanner-container video') as HTMLVideoElement;
+      if (videoElement && videoElement.srcObject) {
+        const stream = videoElement.srcObject as MediaStream;
+        const track = stream.getVideoTracks()[0];
+        
+        if (track) {
+          const capabilities = track.getCapabilities() as any;
+          if (capabilities.torch) {
+            await track.applyConstraints({
+              advanced: [{ torch: !torchEnabled }] as any
+            });
+            setTorchEnabled(!torchEnabled);
+            console.log(`🔦 Torch ${!torchEnabled ? 'ativada' : 'desativada'}`);
+          } else {
+            toast({
+              title: "Lanterna não disponível",
+              description: "Este dispositivo não suporta lanterna",
+              variant: "destructive",
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao alternar torch:", error);
+      toast({
+        title: "Erro ao ativar lanterna",
+        description: "Não foi possível controlar a lanterna",
+        variant: "destructive",
+      });
+    }
   };
 
   const sendCodeToBackend = async (code: string) => {
@@ -315,6 +394,17 @@ export const Scanner = () => {
           <div className="relative">
             <div id="scanner-container" className="w-full" />
             <div className="absolute top-4 right-4 flex gap-2">
+              {scanMode === "barcode" && (
+                <Button
+                  onClick={toggleTorch}
+                  variant={torchEnabled ? "default" : "secondary"}
+                  size="icon"
+                  className="rounded-full shadow-large"
+                  title={torchEnabled ? "Desativar Lanterna" : "Ativar Lanterna"}
+                >
+                  <Flashlight className={`h-5 w-5 ${torchEnabled ? 'fill-current' : ''}`} />
+                </Button>
+              )}
               {availableCameras.length > 1 && (
                 <Button
                   onClick={switchCamera}
