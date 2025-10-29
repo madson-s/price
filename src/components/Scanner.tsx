@@ -133,6 +133,14 @@ export const Scanner = () => {
           qrbox: calculateQrBox, // Função dinâmica!
           aspectRatio: scanMode === "barcode" ? 16/9 : 1.0,
           disableFlip: false, // Permitir flip horizontal
+          videoConstraints: {
+            facingMode: "environment",
+            // Solicitar resolução FULL HD para barcode (melhor nitidez)
+            width: { ideal: scanMode === "barcode" ? 1920 : 1280, min: 1280 },
+            height: { ideal: scanMode === "barcode" ? 1080 : 720, min: 720 },
+            // Frames por segundo para melhor qualidade
+            frameRate: { ideal: scanMode === "barcode" ? 30 : 24 }
+          }
         },
         async (decodedText, decodedResult) => {
           console.log("Código detectado:", decodedText, "Formato:", decodedResult);
