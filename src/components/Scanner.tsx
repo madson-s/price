@@ -21,6 +21,7 @@ export const Scanner = () => {
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [scanMode, setScanMode] = useState<ScanMode>("qrcode");
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -39,6 +40,21 @@ export const Scanner = () => {
     };
   }, []);
 
+  // Aplicar configurações de foco quando o scanner estiver ativo
+  useEffect(() => {
+    if (isScanning) {
+      // Aguardar um pouco para o vídeo iniciar
+      const timer = setTimeout(async () => {
+        const videoElement = document.querySelector('#scanner-container video') as HTMLVideoElement;
+        if (videoElement && videoElement.srcObject) {
+          await applyAdvancedFocusSettings(videoElement.srcObject as MediaStream);
+        }
+      }, 1000); // 1 segundo após iniciar
+
+      return () => clearTimeout(timer);
+    }
+  }, [isScanning, scanMode]);
+
   const getSupportedFormats = (mode: ScanMode): Html5QrcodeSupportedFormats[] => {
     if (mode === "qrcode") {
       return [Html5QrcodeSupportedFormats.QR_CODE];
@@ -48,6 +64,57 @@ export const Scanner = () => {
         Html5QrcodeSupportedFormats.EAN_13,
         Html5QrcodeSupportedFormats.EAN_8,
       ];
+    }
+  };
+
+  // Função para aplicar configurações de foco avançadas
+  const applyAdvancedFocusSettings = async (stream: MediaStream) => {
+    try {
+      const videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack) return;
+
+      // Verificar capacidades de foco da câmera
+      const capabilities = videoTrack.getCapabilities() as any;
+      console.log("Capacidades da câmera:", capabilities);
+
+      const constraints: any = {};
+
+      // Tentar aplicar foco contínuo (autofocus)
+      if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+        constraints.focusMode = 'continuous';
+        console.log("✓ Foco contínuo disponível");
+      }
+
+      // Tentar aplicar exposição automática
+      if (capabilities.exposureMode && capabilities.exposureMode.includes('continuous')) {
+        constraints.exposureMode = 'continuous';
+        console.log("✓ Exposição contínua disponível");
+      }
+
+      // Tentar aplicar white balance automático
+      if (capabilities.whiteBalanceMode && capabilities.whiteBalanceMode.includes('continuous')) {
+        constraints.whiteBalanceMode = 'continuous';
+        console.log("✓ White balance contínuo disponível");
+      }
+
+      // Para códigos de barras, tentar foco em distância média
+      if (scanMode === "barcode" && capabilities.focusDistance) {
+        // Distância ideal para leitura de código de barras (15-30cm)
+        constraints.focusDistance = capabilities.focusDistance.min + 
+          (capabilities.focusDistance.max - capabilities.focusDistance.min) * 0.3;
+        console.log("✓ Ajustando distância de foco para barcode");
+      }
+
+      // Aplicar as constraints
+      if (Object.keys(constraints).length > 0) {
+        await videoTrack.applyConstraints({ advanced: [constraints] });
+        console.log("✓ Configurações de foco aplicadas com sucesso:", constraints);
+      }
+
+      videoStreamRef.current = stream;
+    } catch (error) {
+      console.warn("Não foi possível aplicar configurações avançadas de foco:", error);
+      // Continuar mesmo se falhar, pois o foco automático padrão pode funcionar
     }
   };
 
