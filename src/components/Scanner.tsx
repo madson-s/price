@@ -95,35 +95,42 @@ export const Scanner = () => {
       setCurrentCameraIndex(selectedCameraIndex);
       const cameraId = devices[selectedCameraIndex].id;
 
-      // Calcular tamanho responsivo do box
-      const calculateBoxSize = () => {
+      // Função dinâmica para calcular o qrbox baseado nas dimensões REAIS do vídeo
+      const calculateQrBox = (viewfinderWidth: number, viewfinderHeight: number) => {
+        console.log("Dimensões reais do viewfinder:", { viewfinderWidth, viewfinderHeight });
+        
         if (scanMode === "barcode") {
           // Para código de barras EAN, usar faixa horizontal bem larga
-          const screenWidth = window.innerWidth;
-          const width = Math.min(screenWidth * 0.9, 450); // 90% da tela ou max 450px
-          const height = Math.max(Math.floor(width * 0.3), 100); // Mínimo 100px de altura
+          // Usar 90% da largura do vídeo e altura proporcional
+          const width = Math.floor(viewfinderWidth * 0.9);
+          const height = Math.floor(viewfinderHeight * 0.2); // 20% da altura do vídeo
           
-          console.log("Barcode box size:", { width, height, screenWidth });
+          console.log("Barcode box calculado:", { width, height });
           return { width, height };
         } else {
-          // Para QR code, usar formato quadrado
-          const width = Math.min(window.innerWidth * 0.7, 300);
-          return { width, height: width };
+          // Para QR code, usar formato quadrado (250x250 ou 70% do menor lado)
+          const size = Math.min(
+            Math.floor(viewfinderWidth * 0.7),
+            Math.floor(viewfinderHeight * 0.7),
+            250
+          );
+          
+          console.log("QR code box calculado:", { width: size, height: size });
+          return { width: size, height: size };
         }
       };
 
-      const boxSize = calculateBoxSize();
       console.log("Iniciando scanner com configurações:", {
         scanMode,
-        boxSize,
-        fps: scanMode === "barcode" ? 20 : 10
+        fps: scanMode === "barcode" ? 20 : 10,
+        usingDynamicQrBox: true
       });
 
       await html5QrCode.start(
         cameraId,
         {
           fps: scanMode === "barcode" ? 20 : 10, // FPS maior para barcode
-          qrbox: boxSize,
+          qrbox: calculateQrBox, // Função dinâmica!
           aspectRatio: scanMode === "barcode" ? 16/9 : 1.0,
           disableFlip: false, // Permitir flip horizontal
         },
