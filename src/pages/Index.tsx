@@ -16,7 +16,7 @@ const Index = () => {
             Product Scanner
           </h1>
           <p className="text-muted-foreground">
-            Identifique produtos através de código, imagem ou chat
+            Escaneie QR Codes, códigos de barras, imagens ou converse via chat
           </p>
         </header>
 

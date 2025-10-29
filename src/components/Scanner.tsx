@@ -1,20 +1,25 @@
 import { useState, useEffect, useRef } from "react";
-import { Html5Qrcode, CameraDevice } from "html5-qrcode";
+import { Html5Qrcode, CameraDevice, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera } from "lucide-react";
+import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera, Barcode, QrCode } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const URL_BACKEND_SCAN = "https://api.example.com/scan-code"; // Placeholder URL
+
+type ScanMode = "qrcode" | "barcode";
 
 export const Scanner = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [codeFormat, setCodeFormat] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
+  const [scanMode, setScanMode] = useState<ScanMode>("qrcode");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const { toast } = useToast();
 
@@ -34,6 +39,25 @@ export const Scanner = () => {
     };
   }, []);
 
+  const getSupportedFormats = (mode: ScanMode): Html5QrcodeSupportedFormats[] => {
+    if (mode === "qrcode") {
+      return [Html5QrcodeSupportedFormats.QR_CODE];
+    } else {
+      // Modo "barcode" - suporta todos os formatos de código de barras
+      return [
+        Html5QrcodeSupportedFormats.CODE_128,
+        Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.CODE_93,
+        Html5QrcodeSupportedFormats.EAN_13,
+        Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A,
+        Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.ITF,
+        Html5QrcodeSupportedFormats.CODABAR,
+      ];
+    }
+  };
+
   const startScanner = async (cameraIndex: number = 0) => {
     try {
       setIsRequestingPermission(true);
@@ -52,7 +76,10 @@ export const Scanner = () => {
       // Aguardar o próximo tick para garantir que o DOM foi atualizado
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const html5QrCode = new Html5Qrcode("scanner-container");
+      const html5QrCode = new Html5Qrcode("scanner-container", {
+        formatsToSupport: getSupportedFormats(scanMode),
+        verbose: false,
+      });
       scannerRef.current = html5QrCode;
 
       // Se não foi especificado um índice, procurar pela câmera traseira
@@ -75,21 +102,29 @@ export const Scanner = () => {
       setCurrentCameraIndex(selectedCameraIndex);
       const cameraId = devices[selectedCameraIndex].id;
 
-      // Calcular tamanho responsivo do QR box
-      const calculateQrBoxSize = () => {
-        const width = Math.min(window.innerWidth * 0.7, 300);
-        return { width, height: width };
+      // Calcular tamanho responsivo do box
+      const calculateBoxSize = () => {
+        if (scanMode === "barcode") {
+          // Para código de barras, usar formato retangular horizontal
+          const width = Math.min(window.innerWidth * 0.8, 350);
+          return { width, height: width * 0.4 }; // Proporção 2.5:1
+        } else {
+          // Para QR code e modo "all", usar formato quadrado
+          const width = Math.min(window.innerWidth * 0.7, 300);
+          return { width, height: width };
+        }
       };
 
       await html5QrCode.start(
         cameraId,
         {
           fps: 10,
-          qrbox: calculateQrBoxSize(),
-          aspectRatio: 1.0,
+          qrbox: calculateBoxSize(),
+          aspectRatio: scanMode === "barcode" ? 2.5 : 1.0,
         },
-        async (decodedText) => {
+        async (decodedText, decodedResult) => {
           setScannedCode(decodedText);
+          setCodeFormat(decodedResult.result.format?.formatName || "Desconhecido");
           await stopScanner();
           await sendCodeToBackend(decodedText);
         },
@@ -186,20 +221,49 @@ export const Scanner = () => {
 
   const resetScanner = () => {
     setScannedCode(null);
+    setCodeFormat(null);
     setResult(null);
+  };
+
+  const handleModeChange = (newMode: string) => {
+    setScanMode(newMode as ScanMode);
   };
 
   return (
     <div className="space-y-4">
       {!isScanning && !scannedCode && !isRequestingPermission && (
-        <Button
-          onClick={() => startScanner()}
-          className="w-full h-14 bg-gradient-primary hover:opacity-90 transition-opacity"
-          size="lg"
-        >
-          <Camera className="mr-2 h-5 w-5" />
-          Escanear Código
-        </Button>
+        <>
+          <Card className="p-4 shadow-soft">
+            <div className="space-y-3">
+              <label className="text-sm font-medium">Tipo de Código</label>
+              <Tabs value={scanMode} onValueChange={handleModeChange} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="qrcode" className="gap-2">
+                    <QrCode className="h-4 w-4" />
+                    <span className="hidden sm:inline">QR Code</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="barcode" className="gap-2">
+                    <Barcode className="h-4 w-4" />
+                    <span className="hidden sm:inline">Código de Barras</span>
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <p className="text-xs text-muted-foreground">
+                {scanMode === "qrcode" && "Detecta apenas QR Codes"}
+                {scanMode === "barcode" && "Detecta Códigos de Barras (EAN, UPC, CODE 128, etc.)"}
+              </p>
+            </div>
+          </Card>
+
+          <Button
+            onClick={() => startScanner()}
+            className="w-full h-14 bg-gradient-primary hover:opacity-90 transition-opacity"
+            size="lg"
+          >
+            <Camera className="mr-2 h-5 w-5" />
+            Iniciar Scanner
+          </Button>
+        </>
       )}
 
       {isRequestingPermission && (
@@ -248,9 +312,16 @@ export const Scanner = () => {
 
       {scannedCode && (
         <Card className="p-6 space-y-4 shadow-medium animate-in fade-in-50 slide-in-from-bottom-5">
-          <div className="space-y-2">
-            <h3 className="font-semibold text-lg">Código Detectado</h3>
-            <p className="text-sm text-muted-foreground break-all bg-muted p-3 rounded-lg">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-lg">Código Detectado</h3>
+              {codeFormat && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                  {codeFormat}
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground break-all bg-muted p-3 rounded-lg font-mono">
               {scannedCode}
             </p>
           </div>
