@@ -3,7 +3,7 @@ import { Html5Qrcode, CameraDevice, Html5QrcodeSupportedFormats } from "html5-qr
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
-import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera, Barcode, QrCode, Flashlight, ZoomIn, ZoomOut } from "lucide-react";
+import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera, Barcode, QrCode, ZoomIn, ZoomOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -21,7 +21,6 @@ export const Scanner = () => {
   const [availableCameras, setAvailableCameras] = useState<CameraDevice[]>([]);
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [scanMode, setScanMode] = useState<ScanMode>("qrcode");
-  const [torchEnabled, setTorchEnabled] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [zoomCapabilities, setZoomCapabilities] = useState<{ min: number; max: number; step: number } | null>(null);
   const [supportsZoom, setSupportsZoom] = useState(false);
@@ -214,15 +213,6 @@ export const Scanner = () => {
               setSupportsZoom(false);
               console.warn("⚠️ zoom não suportado neste dispositivo");
             }
-            
-            // Habilitar torch (lanterna) automaticamente para barcode
-            if (scanMode === "barcode" && capabilities.torch) {
-              await track.applyConstraints({ 
-                advanced: [{ torch: true }] as any
-              });
-              setTorchEnabled(true);
-              console.log("🔦 Torch (lanterna) ativada automaticamente");
-            }
           }
         }
       } catch (error) {
@@ -281,40 +271,6 @@ export const Scanner = () => {
     await startScanner(nextCameraIndex);
   };
 
-  const toggleTorch = async () => {
-    try {
-      const videoElement = document.querySelector('#scanner-container video') as HTMLVideoElement;
-      if (videoElement && videoElement.srcObject) {
-        const stream = videoElement.srcObject as MediaStream;
-        const track = stream.getVideoTracks()[0];
-        
-        if (track) {
-          const capabilities = track.getCapabilities() as any;
-          if (capabilities.torch) {
-            await track.applyConstraints({
-              advanced: [{ torch: !torchEnabled }] as any
-            });
-            setTorchEnabled(!torchEnabled);
-            console.log(`🔦 Torch ${!torchEnabled ? 'ativada' : 'desativada'}`);
-          } else {
-            toast({
-              title: "Lanterna não disponível",
-              description: "Este dispositivo não suporta lanterna",
-              variant: "destructive",
-            });
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Erro ao alternar torch:", error);
-      toast({
-        title: "Erro ao ativar lanterna",
-        description: "Não foi possível controlar a lanterna",
-        variant: "destructive",
-      });
-    }
-  };
-
   const applyZoom = async (value: number) => {
     try {
       const videoElement = document.querySelector('#scanner-container video') as HTMLVideoElement;
@@ -352,7 +308,13 @@ export const Scanner = () => {
     await applyZoom(newZoom);
   };
 
-  const handleZoomChange = async (value: number[]) => {
+  const handleZoomChange = (value: number[]) => {
+    // Atualizar visualmente o valor do zoom durante o arrasto
+    setZoomLevel(value[0]);
+  };
+
+  const handleZoomCommit = async (value: number[]) => {
+    // Aplicar zoom apenas quando o usuário soltar o slider
     await applyZoom(value[0]);
   };
 
@@ -461,17 +423,6 @@ export const Scanner = () => {
           <div className="relative">
             <div id="scanner-container" className="w-full" />
             <div className="absolute top-4 right-4 flex gap-2">
-              {scanMode === "barcode" && (
-                <Button
-                  onClick={toggleTorch}
-                  variant={torchEnabled ? "default" : "secondary"}
-                  size="icon"
-                  className="rounded-full shadow-large"
-                  title={torchEnabled ? "Desativar Lanterna" : "Ativar Lanterna"}
-                >
-                  <Flashlight className={`h-5 w-5 ${torchEnabled ? 'fill-current' : ''}`} />
-                </Button>
-              )}
               {availableCameras.length > 1 && (
                 <Button
                   onClick={switchCamera}
@@ -538,6 +489,7 @@ export const Scanner = () => {
               <Slider
                 value={[zoomLevel]}
                 onValueChange={handleZoomChange}
+                onValueCommit={handleZoomCommit}
                 min={zoomCapabilities.min}
                 max={zoomCapabilities.max}
                 step={zoomCapabilities.step}
