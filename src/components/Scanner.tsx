@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Html5Qrcode, CameraDevice, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera, Barcode, QrCode, Flashlight } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Camera, X, CheckCircle, AlertCircle, Loader2, SwitchCamera, Barcode, QrCode, Flashlight, ZoomIn, ZoomOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -21,6 +22,9 @@ export const Scanner = () => {
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [scanMode, setScanMode] = useState<ScanMode>("qrcode");
   const [torchEnabled, setTorchEnabled] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [zoomCapabilities, setZoomCapabilities] = useState<{ min: number; max: number; step: number } | null>(null);
+  const [supportsZoom, setSupportsZoom] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const { toast } = useToast();
 
@@ -192,6 +196,25 @@ export const Scanner = () => {
               console.warn("⚠️ focusMode não suportado - foco será automático do sistema");
             }
             
+            // Verificar suporte a zoom
+            if (capabilities.zoom) {
+              setSupportsZoom(true);
+              setZoomCapabilities({
+                min: capabilities.zoom.min || 1,
+                max: capabilities.zoom.max || 10,
+                step: capabilities.zoom.step || 0.1
+              });
+              setZoomLevel(capabilities.zoom.min || 1);
+              console.log("🔍 Zoom disponível:", {
+                min: capabilities.zoom.min,
+                max: capabilities.zoom.max,
+                step: capabilities.zoom.step
+              });
+            } else {
+              setSupportsZoom(false);
+              console.warn("⚠️ zoom não suportado neste dispositivo");
+            }
+            
             // Habilitar torch (lanterna) automaticamente para barcode
             if (scanMode === "barcode" && capabilities.torch) {
               await track.applyConstraints({ 
@@ -244,6 +267,9 @@ export const Scanner = () => {
       }
       scannerRef.current = null;
       setIsScanning(false);
+      setSupportsZoom(false);
+      setZoomCapabilities(null);
+      setZoomLevel(1);
     }
   };
 
@@ -287,6 +313,47 @@ export const Scanner = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const applyZoom = async (value: number) => {
+    try {
+      const videoElement = document.querySelector('#scanner-container video') as HTMLVideoElement;
+      if (videoElement && videoElement.srcObject) {
+        const stream = videoElement.srcObject as MediaStream;
+        const track = stream.getVideoTracks()[0];
+        
+        if (track) {
+          await track.applyConstraints({
+            advanced: [{ zoom: value }] as any
+          });
+          setZoomLevel(value);
+          console.log(`🔍 Zoom aplicado: ${value.toFixed(1)}x`);
+        }
+      }
+    } catch (error) {
+      console.error("Erro ao aplicar zoom:", error);
+      toast({
+        title: "Erro ao aplicar zoom",
+        description: "Não foi possível ajustar o zoom",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const increaseZoom = async () => {
+    if (!zoomCapabilities) return;
+    const newZoom = Math.min(zoomLevel + zoomCapabilities.step, zoomCapabilities.max);
+    await applyZoom(newZoom);
+  };
+
+  const decreaseZoom = async () => {
+    if (!zoomCapabilities) return;
+    const newZoom = Math.max(zoomLevel - zoomCapabilities.step, zoomCapabilities.min);
+    await applyZoom(newZoom);
+  };
+
+  const handleZoomChange = async (value: number[]) => {
+    await applyZoom(value[0]);
   };
 
   const sendCodeToBackend = async (code: string) => {
@@ -434,6 +501,53 @@ export const Scanner = () => {
               )}
             </div>
           </div>
+          
+          {/* Controles de Zoom */}
+          {supportsZoom && zoomCapabilities && (
+            <div className="p-4 bg-muted/50 border-t space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  🔍 Zoom
+                  <span className="text-xs text-muted-foreground font-normal">
+                    {zoomLevel.toFixed(1)}x
+                  </span>
+                </label>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={decreaseZoom}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    disabled={zoomLevel <= zoomCapabilities.min}
+                    title="Diminuir Zoom"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={increaseZoom}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    disabled={zoomLevel >= zoomCapabilities.max}
+                    title="Aumentar Zoom"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <Slider
+                value={[zoomLevel]}
+                onValueChange={handleZoomChange}
+                min={zoomCapabilities.min}
+                max={zoomCapabilities.max}
+                step={zoomCapabilities.step}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                💡 Use o zoom para aproximar códigos pequenos sem mover o dispositivo
+              </p>
+            </div>
+          )}
         </Card>
       )}
 
